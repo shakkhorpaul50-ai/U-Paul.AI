@@ -3,7 +3,15 @@
     ViewData["Title"] = "Chat";
 }
 <div class="chat-wrap">
-    <h2 class="chat-title">U_Paul-AI chat</h2>
+    <div class="chat-head">
+        <span id="aiDot" class="status-dot" title="AI backend status"></span>
+        <h2 class="chat-title">U_Paul-AI chat</h2>
+    </div>
+    <div class="chat-sub" id="aiSub">Checking AI backend…</div>
+    @if (ViewBag.DbDown == true)
+    {
+        <div class="alert-ai">History unavailable — database is unreachable. New replies still work but won't be saved.</div>
+    }
     @if (ViewBag.DbDown == true)
     {
         <p style="color:#f0888f">History unavailable — database is unreachable. New replies still work but won't be saved.</p>
@@ -11,11 +19,11 @@
     <div id="chat">
         @foreach (var m in Model)
         {
-            <div class="msg @(m.Role == "user" ? "user" : "bot")">@m.Content</div>
+            <div class="msg @(m.Role == "user" ? "user" : "bot")"><span class="who">@(m.Role == "user" ? "U" : "✦")</span><span class="body">@m.Content</span></div>
         }
     </div>
     <div class="chat-bar">
-        <div style="max-width:780px;margin:0 auto;display:flex;gap:8px">
+        <div class="row">
             <input id="prompt" class="form-control" placeholder="হ্যালো লিখুন বা ask anything…" autocomplete="off" />
             <button id="send" class="send">Send</button>
         </div>
@@ -30,8 +38,15 @@ const token = document.querySelector('input[name="__RequestVerificationToken"]')
 function add(text, mine, meta) {
   const d = document.createElement('div');
   d.className = 'msg ' + (mine ? 'user' : 'bot');
-  d.textContent = text;
-  if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; d.appendChild(m); }
+  const who = document.createElement('span');
+  who.className = 'who';
+  who.textContent = mine ? 'U' : '✦';
+  const body = document.createElement('span');
+  body.className = 'body';
+  body.textContent = text;
+  d.appendChild(who);
+  d.appendChild(body);
+  if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; body.appendChild(m); }
   box.appendChild(d);
   window.scrollTo(0, document.body.scrollHeight);
   return d;
@@ -59,4 +74,12 @@ async function send() {
 btn.onclick = send;
 input.onkeydown = e => { if (e.key === 'Enter') send(); };
 input.focus();
+fetch('/healthz').then(r => r.json()).then(j => {
+  const dot = document.getElementById('aiDot'), sub = document.getElementById('aiSub');
+  if (j.ai) { dot.classList.add('on'); sub.textContent = 'AI backend online · model ready'; }
+  else { dot.classList.add('off'); sub.textContent = 'AI backend offline — replies will report the outage.'; }
+}).catch(() => {
+  document.getElementById('aiDot').classList.add('off');
+  document.getElementById('aiSub').textContent = 'Status unreachable.';
+});
 </script>

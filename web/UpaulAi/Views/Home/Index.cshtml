@@ -4,6 +4,12 @@
 <div class="hero">
     <h1>U_Paul-AI</h1>
     <p>260M Bangla + English chat — stories, poems, songs, coding help and friendly company. Built from scratch by <b>Shakkhor Paul</b>.</p>
+    <div class="pills">
+        <span class="pill">বাংলা + English</span>
+        <span class="pill">Stories · Poems · Songs</span>
+        <span class="pill">Code help</span>
+        <span class="pill">Login required</span>
+    </div>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <p><a class="cta" href="/Chat">Open chat →</a></p>
