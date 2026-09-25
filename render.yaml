@@ -1,30 +1,22 @@
 services:
   - type: web
     name: u-paul-ai
-    runtime: python
+    runtime: docker
     plan: free
+    dockerfilePath: ./web/UpaulAi/Dockerfile
+    dockerContext: ./web/UpaulAi
+    healthCheckPath: /healthz
     autoDeploy: true
-    buildCommand: pip install --upgrade pip && pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1
-    healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
-      - key: RELEASE_URL
+      - key: MODEL_URL
         sync: false
-      - key: MODEL_PATH
-        value: models/gguf/smol260M-Q3_K_M.gguf
-      - key: N_CTX
-        value: 512
-      - key: N_BATCH
-        value: 4
       - key: DATABASE_URL
         sync: false
-      - key: CREATOR_EMAIL
+      - key: CREATOR_EMAILS
         sync: false
-      - key: DEBI_EMAIL
+      - key: DEBI_EMAILS
         sync: false
-      - key: FRIEND_EMAIL
+      - key: FRIEND_EMAILS
         sync: false
       - key: SECRET_KEY
         sync: false

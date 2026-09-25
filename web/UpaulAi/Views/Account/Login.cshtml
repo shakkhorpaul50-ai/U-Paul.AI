@@ -1,0 +1,16 @@
+@model UPaulAi.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Login";
+}
+<div style="max-width:420px;margin:40px auto;font-family:system-ui,sans-serif">
+    <h2>Login to U_Paul-AI</h2>
+    <form asp-action="Login" method="post">
+        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+        <div asp-validation-summary="All" style="color:#b3261e"></div>
+        <p><label>Email<br /><input asp-for="Email" type="email" style="width:100%;padding:8px" /></label></p>
+        <p><label>Password<br /><input asp-for="Password" type="password" style="width:100%;padding:8px" /></label></p>
+        <p><label><input asp-for="RememberMe" /> Remember me</label></p>
+        <p><button type="submit" style="padding:10px 20px">Login</button>
+        <a asp-action="Register">Need an account? Register</a></p>
+    </form>
+</div>

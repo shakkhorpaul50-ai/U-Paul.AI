@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 .env
 models/base-260M/
+[Bb]in/
+[Oo]bj/
+*.user
