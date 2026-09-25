@@ -7,3 +7,4 @@ DEFAULT_MODEL = os.environ.get("MODEL_PATH", str(BASE / "models" / "gguf" / "smo
 RELEASE_URL = os.environ.get("RELEASE_URL", "")
 N_CTX = int(os.environ.get("N_CTX", "512"))
 N_BATCH = int(os.environ.get("N_BATCH", "4"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "")

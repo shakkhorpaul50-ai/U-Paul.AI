@@ -1,4 +1,5 @@
 """U-Paul.AI backend: FastAPI + llama-cpp GGUF, lazy background load for Render free."""
+import asyncio
 import sys
 import threading
 import time
@@ -12,7 +13,8 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from gateway.router import detect_skill, system_prompt, role_for_email, max_tokens_for, route_key
-from backend.model import DEFAULT_MODEL, RELEASE_URL, N_CTX, N_BATCH
+from backend import database as db
+from backend.model import DEFAULT_MODEL, RELEASE_URL, N_CTX, N_BATCH, DATABASE_URL
 
 _llm = None
 _loading = False
@@ -27,6 +29,9 @@ def _ensure_model() -> str:
     if not RELEASE_URL:
         _load_error = "Model not loaded: missing file and no RELEASE_URL"
         return ""
+    if not RELEASE_URL.startswith(("http://", "https://")):
+        _load_error = "Model not loaded: RELEASE_URL not set to a download link"
+        return ""
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
         urllib.request.urlretrieve(RELEASE_URL, str(p))
@@ -34,6 +39,11 @@ def _ensure_model() -> str:
     except Exception as e:  # noqa: BLE001
         _load_error = f"download failed: {e}"
         return ""
+
+
+def _init_db_bg() -> None:
+    if DATABASE_URL:
+        asyncio.run(db.init_db(DATABASE_URL))
 
 
 def _load_bg() -> None:
@@ -62,6 +72,7 @@ def startup() -> None:
     global _loading
     _loading = True
     threading.Thread(target=_load_bg, daemon=True).start()
+    threading.Thread(target=_init_db_bg, daemon=True).start()
 
 
 @app.get("/health")
@@ -72,6 +83,8 @@ def health() -> dict:
         "error": _load_error,
         "model": Path(DEFAULT_MODEL).name,
         "n_ctx": N_CTX,
+        "db_ok": db.ok(),
+        "db_error": db.error(),
     }
 
 
@@ -84,6 +97,18 @@ def chat(inp: ChatIn) -> JSONResponse:
         )
     role = role_for_email(inp.email)
     skill, conf = detect_skill(inp.prompt)
+    if db.ok() and inp.email.strip():
+        try:
+            role = asyncio.run(db.get_role(inp.email))
+        except Exception:  # noqa: BLE001
+            pass
+    if db.ok():
+        try:
+            cached = asyncio.run(db.cached_skill(route_key(inp.prompt)))
+            if cached:
+                skill = cached
+        except Exception:  # noqa: BLE001
+            pass
     sys_p = system_prompt(skill, nsfw_on=inp.nsfw_on, role=role)
     prompt = (
         f"<|im_start|>system\n{sys_p}<|im_end|>\n"
@@ -95,15 +120,34 @@ def chat(inp: ChatIn) -> JSONResponse:
     text = out["choices"][0]["text"].strip()
     if not text:
         text = "No reply generated. Try a shorter prompt."
+    ms = int((time.time() - t0) * 1000)
+    if db.ok():
+        try:
+            asyncio.run(_log_chat(inp.email, role, skill, conf, inp.prompt, text, ms))
+        except Exception:  # noqa: BLE001
+            pass
     return JSONResponse(
         {
             "reply": text,
             "skill": skill,
             "confidence": conf,
-            "ms": int((time.time() - t0) * 1000),
+            "ms": ms,
             "route": route_key(inp.prompt),
         }
     )
+
+
+async def _log_chat(
+    email: str, role: str, skill: str, conf: float, prompt: str, reply: str, ms: int
+) -> None:
+    if email.strip():
+        user_id = await db.get_or_create_user(email, role)
+    else:
+        user_id = await db.get_or_create_user("anon@local", "public")
+    session_id = await db.new_session(user_id, skill)
+    await db.log_message(session_id, "user", prompt, len(prompt.split()), 0)
+    await db.log_message(session_id, "assistant", reply, len(reply.split()), ms)
+    await db.cache_skill(route_key(prompt), skill, conf)
 
 
 app.mount("/", StaticFiles(directory="ui", html=True), name="ui")

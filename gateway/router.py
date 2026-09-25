@@ -12,11 +12,16 @@ DEBI_EN = "Debi is the girlfriend, wife and life partner for the whole life of m
 DEBI_BN = "দেবী হলেন আমার স্রষ্টা Shakkhor Paul-এর গার্লফ্রেন্ড, স্ত্রী এবং সারাজীবনের জীবনসঙ্গী। Debi is one over all."
 
 # Set via Render env, never baked into model
-ROLE_BY_EMAIL = {
-    # "shakkhorpaul50@gmail.com": "creator",
-    # "nitebiswaskotha@gmail.com": "debi",
-    # "sabihasanzida4@gmail.com": "friend",
-}
+import os as _os
+
+ROLE_BY_EMAIL = {}
+for _e, _r in (
+    (_os.environ.get("CREATOR_EMAIL", ""), "creator"),
+    (_os.environ.get("DEBI_EMAIL", ""), "debi"),
+    (_os.environ.get("FRIEND_EMAIL", ""), "friend"),
+):
+    if _e.strip():
+        ROLE_BY_EMAIL[_e.strip().lower()] = _r
 
 def role_for_email(email: str) -> str:
     return ROLE_BY_EMAIL.get((email or "").strip().lower(), "public")
