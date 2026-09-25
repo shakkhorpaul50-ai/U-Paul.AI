@@ -3,3 +3,4 @@ uvicorn
 llama-cpp-python
 pydantic
 asyncpg
+pyjwt

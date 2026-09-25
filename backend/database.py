@@ -15,6 +15,9 @@ async def init_db(url: str) -> None:
         async with _pool.acquire() as c:
             await c.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
             await c.execute(schema)
+            await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;")
+            await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;")
+            await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS picture TEXT;")
         _db_ok = True
     except Exception as e:  # noqa: BLE001
         _db_error = str(e)[:200]
@@ -32,6 +35,30 @@ async def get_role(email: str) -> str:
     async with _pool.acquire() as c:
         row = await c.fetchrow("SELECT role FROM users WHERE email=$1", email.strip().lower())
     return row["role"] if row else "public"
+
+
+async def oauth_upsert(email: str, name: str, picture: str, google_sub: str, role: str) -> dict:
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "INSERT INTO users(email, role, name, picture, google_sub) VALUES($1, $2, $3, $4, $5) "
+            "ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name, picture=EXCLUDED.picture, "
+            "google_sub=EXCLUDED.google_sub, role=EXCLUDED.role "
+            "RETURNING id, email, role, name, picture",
+            email.strip().lower(),
+            role,
+            name,
+            picture,
+            google_sub,
+        )
+    return dict(row)
+
+
+async def get_user(user_id: str) -> dict:
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT id, email, role, name, picture FROM users WHERE id=$1", user_id
+        )
+    return dict(row) if row else {}
 
 
 async def get_or_create_user(email: str, role: str) -> str:

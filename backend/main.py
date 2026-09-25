@@ -6,16 +6,23 @@ import time
 import urllib.request
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from gateway.router import detect_skill, system_prompt, role_for_email, max_tokens_for, route_key
+from backend import auth as authmod
 from backend import database as db
-from backend.model import DEFAULT_MODEL, RELEASE_URL, N_CTX, N_BATCH, DATABASE_URL
+from backend.model import (
+    DEFAULT_MODEL,
+    RELEASE_URL,
+    N_CTX,
+    N_BATCH,
+    DATABASE_URL,
+)
 
 _llm = None
 _loading = False
@@ -72,8 +79,66 @@ app.add_middleware(
 
 class ChatIn(BaseModel):
     prompt: str
-    email: str = ""
     nsfw_on: bool = False
+
+
+def _redirect_uri(request: Request) -> str:
+    return str(request.base_url) + "api/auth/callback"
+
+
+@app.get("/api/auth/google")
+def auth_google(request: Request):
+    if not authmod.configured():
+        return JSONResponse({"error": "Google login not configured"}, status_code=500)
+    return RedirectResponse(authmod.login_url(_redirect_uri(request)))
+
+
+@app.get("/api/auth/callback")
+def auth_callback(request: Request, code: str = "", state: str = ""):
+    if not authmod.configured():
+        return JSONResponse({"error": "Google login not configured"}, status_code=500)
+    try:
+        info = authmod.handle_callback(code, state, _redirect_uri(request))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+    email = info.get("email", "").strip().lower()
+    role = role_for_email(email)
+    try:
+        user = asyncio.run(
+            db.oauth_upsert(
+                email,
+                info.get("name", ""),
+                info.get("picture", ""),
+                info.get("sub", ""),
+                role,
+            )
+        )
+        role = user.get("role", role)
+        token = authmod.app_token(
+            str(user.get("id")), email, role, info.get("name", ""), info.get("picture", "")
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"Login failed: {e}"}, status_code=500)
+    return RedirectResponse("/#token=" + token)
+
+
+@app.get("/api/me")
+def me(request: Request):
+    claims = authmod.require_user(request)
+    role = claims.get("role", "public")
+    if db.ok():
+        try:
+            user = asyncio.run(db.get_user(claims.get("uid", "")))
+            if user:
+                role = user.get("role", role)
+        except Exception:  # noqa: BLE001
+            pass
+    return {
+        "email": claims.get("email", ""),
+        "name": claims.get("name", ""),
+        "picture": claims.get("picture", ""),
+        "role": role,
+    }
 
 
 @app.on_event("startup")
@@ -99,19 +164,23 @@ def health() -> dict:
 
 
 @app.post("/api/chat")
-def chat(inp: ChatIn) -> JSONResponse:
+def chat(inp: ChatIn, request: Request) -> JSONResponse:
+    claims = authmod.require_user(request)
     if _llm is None:
         return JSONResponse(
             {"error": "Model not loaded yet" if _loading else (_load_error or "Model not loaded")},
             status_code=503,
         )
-    role = role_for_email(inp.email)
-    skill, conf = detect_skill(inp.prompt)
-    if db.ok() and inp.email.strip():
+    role = claims.get("role", "public")
+    user_id = claims.get("uid", "")
+    if db.ok() and user_id:
         try:
-            role = asyncio.run(db.get_role(inp.email))
+            user = asyncio.run(db.get_user(user_id))
+            if user:
+                role = user.get("role", role)
         except Exception:  # noqa: BLE001
             pass
+    skill, conf = detect_skill(inp.prompt)
     if db.ok():
         try:
             cached = asyncio.run(db.cached_skill(route_key(inp.prompt)))
@@ -131,9 +200,9 @@ def chat(inp: ChatIn) -> JSONResponse:
     if not text:
         text = "No reply generated. Try a shorter prompt."
     ms = int((time.time() - t0) * 1000)
-    if db.ok():
+    if db.ok() and user_id:
         try:
-            asyncio.run(_log_chat(inp.email, role, skill, conf, inp.prompt, text, ms))
+            asyncio.run(_log_chat(user_id, role, skill, conf, inp.prompt, text, ms))
         except Exception:  # noqa: BLE001
             pass
     return JSONResponse(
@@ -148,12 +217,8 @@ def chat(inp: ChatIn) -> JSONResponse:
 
 
 async def _log_chat(
-    email: str, role: str, skill: str, conf: float, prompt: str, reply: str, ms: int
+    user_id: str, role: str, skill: str, conf: float, prompt: str, reply: str, ms: int
 ) -> None:
-    if email.strip():
-        user_id = await db.get_or_create_user(email, role)
-    else:
-        user_id = await db.get_or_create_user("anon@local", "public")
     session_id = await db.new_session(user_id, skill)
     await db.log_message(session_id, "user", prompt, len(prompt.split()), 0)
     await db.log_message(session_id, "assistant", reply, len(reply.split()), ms)
