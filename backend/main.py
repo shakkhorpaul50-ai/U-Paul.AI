@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -60,6 +61,14 @@ def _load_bg() -> None:
 
 app = FastAPI(title="U-Paul.AI")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class ChatIn(BaseModel):
     prompt: str
@@ -76,6 +85,7 @@ def startup() -> None:
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health() -> dict:
     return {
         "loaded": _llm is not None,
@@ -150,4 +160,4 @@ async def _log_chat(
     await db.cache_skill(route_key(prompt), skill, conf)
 
 
-app.mount("/", StaticFiles(directory="ui", html=True), name="ui")
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
