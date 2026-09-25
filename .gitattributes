@@ -1,0 +1,2 @@
+# Keep shell scripts LF so entrypoint.sh runs on Linux containers.
+*.sh text eol=lf

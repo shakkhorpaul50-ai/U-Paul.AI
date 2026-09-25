@@ -3,8 +3,7 @@ services:
     name: u-paul-ai
     runtime: docker
     plan: free
-    dockerfilePath: ./web/UpaulAi/Dockerfile
-    dockerContext: ./web/UpaulAi
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:

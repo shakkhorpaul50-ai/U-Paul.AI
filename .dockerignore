@@ -1,0 +1,12 @@
+# Keep the 234MB GGUF, raw data and local junk out of the Docker build context.
+.git/
+models/
+data/
+backend/
+frontend/
+gateway/
+*.zip
+*.gguf
+bin/
+obj/
+.vs/

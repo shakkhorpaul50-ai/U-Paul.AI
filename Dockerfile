@@ -1,9 +1,11 @@
 # U_Paul-AI webapp + llama-server in one image (Render free, single service).
+# Build context: repo root. See .dockerignore (GGUF/data stay out of the image).
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY *.csproj ./
-RUN dotnet restore
-COPY . ./
+COPY web/UpaulAi/*.csproj ./web/UpaulAi/
+RUN dotnet restore ./web/UpaulAi/UPaulAi.csproj
+COPY web/UpaulAi/ ./web/UpaulAi/
+WORKDIR /src/web/UpaulAi
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
@@ -19,7 +21,7 @@ RUN mkdir -p /opt/llama \
     && llama-server --version
 WORKDIR /app
 COPY --from=build /app/publish ./
-COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
+COPY web/UpaulAi/entrypoint.sh ./
+RUN sed -i 's/\r$//' entrypoint.sh && chmod +x entrypoint.sh
 EXPOSE 10000
 ENTRYPOINT ["./entrypoint.sh"]
