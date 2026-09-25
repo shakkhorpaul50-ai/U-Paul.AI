@@ -4,6 +4,7 @@
 __pycache__/
 .venv/
 .env
+appsettings.Local.json
 /models/base-260M/
 [Bb]in/
 [Oo]bj/
