@@ -63,7 +63,15 @@ app.MapGet("/healthz", async (AppDbContext db, LlamaClient llama, CancellationTo
     try { dbOk = await db.Database.CanConnectAsync(ct); }
     catch (Exception ex) { dbError = ex.GetBaseException().Message; }
     if (dbError.Length > 200) dbError = dbError[..200];
-    return Results.Json(new { ok = true, db = dbOk, dbError, ai = await llama.IsUpAsync(ct) });
+    var sha = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT");
+    return Results.Json(new
+    {
+        ok = true,
+        db = dbOk,
+        dbError,
+        ai = await llama.IsUpAsync(ct),
+        build = string.IsNullOrEmpty(sha) ? "local" : sha[..Math.Min(7, sha.Length)]
+    });
 });
 
 app.MapControllerRoute(
