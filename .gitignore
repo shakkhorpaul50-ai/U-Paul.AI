@@ -1,7 +1,7 @@
 *.gguf
 *.zip
 /data/
-/__pycache__/
+__pycache__/
 .venv/
 .env
 /models/base-260M/
