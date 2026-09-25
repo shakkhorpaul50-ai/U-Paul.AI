@@ -36,7 +36,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var sp = scope.ServiceProvider;
-        sp.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+        await sp.GetRequiredService<AppDbContext>().Database.MigrateAsync();
         await sp.GetRequiredService<RoleSeeder>().EnsureRolesAsync();
     }
     catch (Exception ex)
