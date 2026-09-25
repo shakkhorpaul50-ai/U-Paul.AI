@@ -4,6 +4,10 @@
 }
 <div class="chat-wrap">
     <h2 class="chat-title">U_Paul-AI chat</h2>
+    @if (ViewBag.DbDown == true)
+    {
+        <p style="color:#f0888f">History unavailable — database is unreachable. New replies still work but won't be saved.</p>
+    }
     <div id="chat">
         @foreach (var m in Model)
         {

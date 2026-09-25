@@ -19,7 +19,16 @@ public sealed class AccountController(
     {
         if (!ModelState.IsValid) return View(m);
         var u = new AppUser { UserName = m.Email, Email = m.Email, DisplayName = m.DisplayName };
-        var r = await users.CreateAsync(u, m.Password);
+        IdentityResult r;
+        try
+        {
+            r = await users.CreateAsync(u, m.Password);
+        }
+        catch
+        {
+            ModelState.AddModelError("", "Database unavailable. Try again later.");
+            return View(m);
+        }
         if (!r.Succeeded)
         {
             foreach (var e in r.Errors) ModelState.AddModelError("", e.Description);
@@ -41,8 +50,18 @@ public sealed class AccountController(
     public async Task<IActionResult> Login(LoginViewModel m, string? returnUrl = null)
     {
         if (!ModelState.IsValid) return View(m);
-        var r = await signIn.PasswordSignInAsync(m.Email, m.Password, m.RememberMe, lockoutOnFailure: false);
-        if (!r.Succeeded)
+        bool ok;
+        try
+        {
+            var r = await signIn.PasswordSignInAsync(m.Email, m.Password, m.RememberMe, lockoutOnFailure: false);
+            ok = r.Succeeded;
+        }
+        catch
+        {
+            ModelState.AddModelError("", "Database unavailable. Try again later.");
+            return View(m);
+        }
+        if (!ok)
         {
             ModelState.AddModelError("", "Invalid email or password.");
             return View(m);

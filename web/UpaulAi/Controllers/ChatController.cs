@@ -17,18 +17,25 @@ public sealed class ChatController(
 {
     public async Task<IActionResult> Index(CancellationToken ct)
     {
-        var u = await users.GetUserAsync(User);
         var msgs = new List<ChatMessage>();
-        if (u is not null)
+        try
         {
-            var s = await db.ChatSessions
-                .Where(x => x.UserId == u.Id)
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync(ct);
-            if (s is not null)
-                msgs = await db.ChatMessages
-                    .Where(m => m.SessionId == s.Id)
-                    .OrderBy(m => m.Id).Take(50).ToListAsync(ct);
+            var u = await users.GetUserAsync(User);
+            if (u is not null)
+            {
+                var s = await db.ChatSessions
+                    .Where(x => x.UserId == u.Id)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (s is not null)
+                    msgs = await db.ChatMessages
+                        .Where(m => m.SessionId == s.Id)
+                        .OrderBy(m => m.Id).Take(50).ToListAsync(ct);
+            }
+        }
+        catch
+        {
+            ViewBag.DbDown = true;
         }
         return View(msgs);
     }
@@ -39,10 +46,18 @@ public sealed class ChatController(
         prompt = (prompt ?? "").Trim();
         if (prompt.Length == 0) return Json(new { error = "Empty prompt." });
         if (prompt.Length > 2000) prompt = prompt[..2000];
-        var u = await users.GetUserAsync(User);
-        if (u is null) return Unauthorized();
-        var roles = await users.GetRolesAsync(u);
-        var role = roles.Contains("creator") ? "creator"
+        UPaulAi.Models.AppUser? u;
+        IList<string> roles;
+        try
+        {
+            u = await users.GetUserAsync(User);
+            if (u is null) return Unauthorized();
+            roles = await users.GetRolesAsync(u);
+        }
+        catch
+        {
+            return Json(new { error = "Database unavailable. Try again later." });
+        }        var role = roles.Contains("creator") ? "creator"
             : roles.Contains("debi") ? "debi"
             : roles.Contains("friend") ? "friend" : "public";
 
@@ -85,6 +100,13 @@ public sealed class ChatController(
             SessionId = s.Id, Role = "assistant", Content = reply,
             Tokens = reply.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length, Ms = ms
         });
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            // History is best-effort; the reply was already generated.
+        }
     }
 }
