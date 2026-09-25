@@ -1,166 +1,109 @@
-import os
-import uuid
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-
-from model import ChatModel, MODEL_PATH as MODEL_FILE
-from database import Database
-from schemas import ChatRequest, ChatResponse, ConversationHistory, Message
-
-model: ChatModel | None = None
-db: Database | None = None
-
-
+"""U-Paul.AI backend: FastAPI + llama-cpp GGUF, lazy background load for Render free."""
+import sys
 import threading
+import time
+import urllib.request
+from pathlib import Path
 
-_model_lock = threading.Lock()
-_model_loading = False
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-def _load_model_background():
-    global model, _model_loading
-    with _model_lock:
-        if model is not None or _model_loading:
-            return
-        _model_loading = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from gateway.router import detect_skill, system_prompt, role_for_email, max_tokens_for, route_key
+from backend.model import DEFAULT_MODEL, RELEASE_URL, N_CTX, N_BATCH
+
+_llm = None
+_loading = False
+_load_error = ""
+
+
+def _ensure_model() -> str:
+    global _load_error
+    p = Path(DEFAULT_MODEL)
+    if p.exists() and p.stat().st_size > 0:
+        return str(p)
+    if not RELEASE_URL:
+        _load_error = "Model not loaded: missing file and no RELEASE_URL"
+        return ""
+    p.parent.mkdir(parents=True, exist_ok=True)
     try:
-        print("[lifespan] Loading ChatModel in background (355MB Q3_K_M, 24 layers)...")
-        m = ChatModel()
-        with _model_lock:
-            model = m
-            print(f"[lifespan] ChatModel loaded: {model.llm}")
-    except Exception as e:
-        print(f"[lifespan] ChatModel failed: {e}")
-        import traceback
-
-        traceback.print_exc()
-        with _model_lock:
-            model = None
-    finally:
-        with _model_lock:
-            _model_loading = False
+        urllib.request.urlretrieve(RELEASE_URL, str(p))
+        return str(p)
+    except Exception as e:  # noqa: BLE001
+        _load_error = f"download failed: {e}"
+        return ""
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global db
-    # Start DB immediately (fast, in-memory fallback if DATABASE_URL missing)
-    try:
-        print("[lifespan] Connecting Database...")
-        db = Database()
-        print("[lifespan] Database ready")
-    except Exception as e:
-        print(f"[lifespan] Database failed: {e}")
-        import traceback
+def _load_bg() -> None:
+    global _llm, _loading
+    from llama_cpp import Llama
 
-        traceback.print_exc()
-        db = None
-    # Load model in background thread so Render health check passes within 10s (avoids 502)
-    # Render free 512MB: 355MB model + 130MB runtime + 17MB KV (N_CTX 128) = ~502MB
-    threading.Thread(target=_load_model_background, daemon=True).start()
-    print("[lifespan] Model load started in background, app ready for /health")
-    yield
+    mp = _ensure_model()
+    if not mp:
+        _loading = False
+        return
+    _llm = Llama(model_path=mp, n_ctx=N_CTX, n_batch=N_BATCH, n_threads=1, verbose=False)
+    _loading = False
 
 
-app = FastAPI(title="AI Chat", lifespan=lifespan)
+app = FastAPI(title="U-Paul.AI")
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
-    global model
-    # Lazy load: if model not yet loaded, try to load now (first request after cold start)
-    if model is None:
-        # If background thread is still loading, inform client to retry
-        if _model_loading:
-            raise HTTPException(status_code=503, detail="Model is loading (355MB Q3_K_M, 24 layers) - please retry in 15s (check /health)")
-        # Try to load synchronously if background failed
-        try:
-            print("[chat] Model not loaded, attempting on-demand load...")
-            with _model_lock:
-                if model is None:
-                    model = ChatModel()
-                    print(f"[chat] On-demand model loaded: {model.llm}")
-        except Exception as e:
-            print(f"[chat] On-demand load failed: {e}")
-            import traceback
+class ChatIn(BaseModel):
+    prompt: str
+    email: str = ""
+    nsfw_on: bool = False
 
-            traceback.print_exc()
-            raise HTTPException(status_code=503, detail=f"Model not loaded - {e} (check /health, MODEL_PATH={os.environ.get('MODEL_PATH', MODEL_FILE)})")
-    if db is None:
-        # In-memory fallback already in Database, so this should not happen
-        raise HTTPException(status_code=503, detail="Database not ready - check DATABASE_URL")
-    conv_id = req.conversation_id
-    if not conv_id:
-        conv_id = db.create_conversation()
 
-    try:
-        history = db.get_history(conv_id)
-    except Exception as e:
-        print(f"[chat] get_history failed: {e}")
-        history = []
-    history_dicts = [{"role": m["role"], "content": m["content"]} for m in history]
-
-    try:
-        response_text = model.generate(req.message, history_dicts)
-    except Exception as e:
-        print(f"[chat] generate failed: {e}")
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Model generate failed: {e}")
-
-    try:
-        db.save_message(conv_id, "user", req.message)
-        db.save_message(conv_id, "assistant", response_text)
-    except Exception as e:
-        print(f"[chat] db save failed: {e}")
-
-    return ChatResponse(response=response_text, conversation_id=conv_id)
+@app.on_event("startup")
+def startup() -> None:
+    global _loading
+    _loading = True
+    threading.Thread(target=_load_bg, daemon=True).start()
 
 
 @app.get("/health")
-def health():
-    mpath = os.environ.get("MODEL_PATH", MODEL_FILE)
-    exists = os.path.exists(mpath)
-    size_mb = round(os.path.getsize(mpath)/1e6,1) if exists else 0
-    # LFS pointer is <2MB and contains git-lfs marker
-    is_pointer = False
-    if exists and size_mb < 2:
-        try:
-            with open(mpath, "r", encoding="utf-8", errors="ignore") as f:
-                if "https://git-lfs.github.com/spec/v1" in f.read(512):
-                    is_pointer = True
-        except:
-            pass
+def health() -> dict:
     return {
-        "ok": model is not None and exists and size_mb > 10,
-        "loading": _model_loading,
-        "model": mpath,
-        "model_exists": exists,
-        "model_size_mb": size_mb,
-        "is_lfs_pointer": is_pointer,
-        "db": db is not None and getattr(db, 'url', None) is not None,
-        "db_mode": "postgres" if db and getattr(db, 'url', None) else "memory",
+        "loaded": _llm is not None,
+        "loading": _loading,
+        "error": _load_error,
+        "model": Path(DEFAULT_MODEL).name,
+        "n_ctx": N_CTX,
     }
 
 
-@app.get("/api/history/{conversation_id}", response_model=ConversationHistory)
-def history(conversation_id: str):
-    rows = db.get_history(conversation_id)
-    messages = [Message(role=r["role"], content=r["content"]) for r in rows]
-    return ConversationHistory(conversation_id=conversation_id, messages=messages)
+@app.post("/api/chat")
+def chat(inp: ChatIn) -> JSONResponse:
+    if _llm is None:
+        return JSONResponse(
+            {"error": "Model not loaded yet" if _loading else (_load_error or "Model not loaded")},
+            status_code=503,
+        )
+    role = role_for_email(inp.email)
+    skill, conf = detect_skill(inp.prompt)
+    sys_p = system_prompt(skill, nsfw_on=inp.nsfw_on, role=role)
+    prompt = (
+        f"<|im_start|>system\n{sys_p}<|im_end|>\n"
+        f"<|im_start|>user\n{inp.prompt}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    )
+    t0 = time.time()
+    out = _llm(prompt, max_tokens=max_tokens_for(role), temperature=0.7, top_p=0.9, stop=["<|im_end|>"])
+    text = out["choices"][0]["text"].strip()
+    if not text:
+        text = "No reply generated. Try a shorter prompt."
+    return JSONResponse(
+        {
+            "reply": text,
+            "skill": skill,
+            "confidence": conf,
+            "ms": int((time.time() - t0) * 1000),
+            "route": route_key(inp.prompt),
+        }
+    )
 
 
-@app.delete("/api/conversation/{conversation_id}")
-def delete_conversation(conversation_id: str):
-    db.delete_conversation(conversation_id)
-    return {"ok": True}
-
-
-@app.get("/")
-def index():
-    return FileResponse("../frontend/index.html")
-
-
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+app.mount("/", StaticFiles(directory="ui", html=True), name="ui")

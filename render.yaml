@@ -1,22 +1,16 @@
 services:
   - type: web
-    name: ai-chat
-    runtime: python
-    buildCommand: mkdir -p models && (test -f models/qwen2.5-0.5b-bangla-Q3_K_M.gguf && test $(stat -c%s models/qwen2.5-0.5b-bangla-Q3_K_M.gguf) -gt 10000000 && echo "Model exists $(du -h models/qwen2.5-0.5b-bangla-Q3_K_M.gguf)" || (echo "Downloading 355MB GGUF..." && curl -L --progress-bar -o models/qwen2.5-0.5b-bangla-Q3_K_M.gguf https://github.com/shakkhorpaul50-ai/Paul-ai/releases/download/v1.0/qwen2.5-0.5b-bangla-Q3_K_M.gguf && ls -lh models/)) && pip install -r backend/requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: DATABASE_URL
-        sync: false
-      - key: MODEL_PATH
-        value: models/qwen2.5-0.5b-bangla-Q3_K_M.gguf
-      - key: N_CTX
-        value: "128"
-      - key: N_BATCH
-        value: "4"
-      - key: PYTHON_VERSION
-        value: "3.11.9"
+    name: u-paul-ai
+    env: python
     plan: free
-    disk:
-      name: model-storage
-      mountPath: /opt/render/project/src/models
-      sizeGB: 1
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: RELEASE_URL
+        value: SET_TO_GGUF_RELEASE_URL
+      - key: MODEL_PATH
+        value: models/gguf/smol260M-Q3_K_M.gguf
+      - key: N_CTX
+        value: 512
+      - key: N_BATCH
+        value: 4

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>U-Paul.AI — 260M Bangla + English Chat</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0f1420; color: #e8ecf4; }
+  header { padding: 12px 16px; background: #161d2e; border-bottom: 1px solid #2a3550; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  header small { color: #8fa0c0; }
+  #email { background: #0f1420; color: #e8ecf4; border: 1px solid #2a3550; border-radius: 8px; padding: 6px 10px; }
+  #status { font-size: 12px; color: #8fa0c0; }
+  #chat { max-width: 760px; margin: 0 auto; padding: 16px; padding-bottom: 90px; }
+  .msg { margin: 10px 0; padding: 10px 12px; border-radius: 10px; line-height: 1.5; white-space: pre-wrap; }
+  .user { background: #1e2a45; margin-left: 60px; }
+  .bot { background: #1a2236; margin-right: 60px; border: 1px solid #2a3550; }
+  .meta { font-size: 11px; color: #8fa0c0; margin-top: 6px; }
+  #bar { position: fixed; bottom: 0; left: 0; right: 0; background: #161d2e; border-top: 1px solid #2a3550; padding: 10px; display: flex; gap: 8px; max-width: 760px; margin: 0 auto; }
+  #prompt { flex: 1; background: #0f1420; color: #e8ecf4; border: 1px solid #2a3550; border-radius: 8px; padding: 10px; }
+  button { background: #3b6fe0; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+</style>
+</head>
+<body>
+<header>
+  <h1>U-Paul.AI</h1>
+  <small>260M Bangla + English + Code (by Shakkhor Paul)</small>
+  <input id="email" type="email" placeholder="email (optional, for role)">
+  <span id="status">checking model…</span>
+</header>
+<div id="chat"></div>
+<div id="bar">
+  <input id="prompt" placeholder="হ্যালো লিখুন বা ask anything…" autocomplete="off">
+  <button id="send">Send</button>
+</div>
+<script>
+const chat = document.getElementById('chat');
+const promptEl = document.getElementById('prompt');
+const emailEl = document.getElementById('email');
+const sendBtn = document.getElementById('send');
+const statusEl = document.getElementById('status');
+
+async function health() {
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    statusEl.textContent = j.loaded ? 'model ready (' + j.model + ')' : (j.loading ? 'model loading…' : ('error: ' + (j.error || 'not loaded')));
+  } catch (e) { statusEl.textContent = 'backend offline'; }
+}
+setInterval(health, 5000); health();
+
+function add(text, cls, meta) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  d.textContent = text;
+  if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; d.appendChild(m); }
+  chat.appendChild(d);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function send() {
+  const prompt = promptEl.value.trim();
+  if (!prompt) return;
+  promptEl.value = '';
+  sendBtn.disabled = true;
+  add(prompt, 'user');
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt, email: emailEl.value})
+    });
+    const j = await r.json();
+    if (!r.ok) add('Error: ' + (j.error || r.status), 'bot');
+    else add(j.reply, 'bot', (j.skill || '') + ' · ' + (j.ms || 0) + 'ms');
+  } catch (e) { add('Error: ' + e.message, 'bot'); }
+  sendBtn.disabled = false;
+}
+sendBtn.onclick = send;
+promptEl.onkeydown = e => { if (e.key === 'Enter') send(); };
+</script>
+</body>
+</html>
