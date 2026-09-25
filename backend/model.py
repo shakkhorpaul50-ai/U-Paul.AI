@@ -1,4 +1,4 @@
-"""U-Paul.AI model config: single 260M GGUF, runtime Release-download (file is 234MB, over GitHub limit)."""
+"""U_Paul-AI model config: single 260M GGUF, runtime Release-download (file is 234MB, over GitHub limit)."""
 import os
 from pathlib import Path
 

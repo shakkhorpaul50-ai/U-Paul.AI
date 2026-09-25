@@ -1,4 +1,4 @@
-"""U-Paul.AI backend: FastAPI + llama-cpp GGUF, lazy background load for Render free."""
+"""U_Paul-AI backend: FastAPI + llama-cpp GGUF, lazy background load for Render free."""
 import asyncio
 import sys
 import threading
@@ -59,7 +59,7 @@ def _load_bg() -> None:
     _loading = False
 
 
-app = FastAPI(title="U-Paul.AI")
+app = FastAPI(title="U_Paul-AI")
 
 app.add_middleware(
     CORSMiddleware,
