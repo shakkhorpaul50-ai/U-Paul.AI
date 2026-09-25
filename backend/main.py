@@ -163,6 +163,57 @@ def health() -> dict:
     }
 
 
+class AuthIn(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+
+
+@app.post("/api/register")
+def register(inp: AuthIn):
+    email = inp.email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return JSONResponse({"error": "Invalid email"}, status_code=400)
+    if len(inp.password) < 8:
+        return JSONResponse({"error": "Password must be at least 8 characters"}, status_code=400)
+    if not db.ok():
+        return JSONResponse({"error": "Database not ready, try again shortly"}, status_code=503)
+    role = role_for_email(email)
+    try:
+        user = asyncio.run(
+            db.create_password_user(
+                email, inp.name.strip(), authmod.hash_password(inp.password), role
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"Registration failed: {e}"}, status_code=500)
+    if not user:
+        return JSONResponse({"error": "Email already registered, try logging in"}, status_code=409)
+    token = authmod.app_token(
+        str(user["id"]), user["email"], user.get("role", role), user.get("name") or ""
+    )
+    return {"token": token, "email": user["email"], "role": user.get("role", role)}
+
+
+@app.post("/api/login")
+def login(inp: AuthIn):
+    email = inp.email.strip().lower()
+    if not db.ok():
+        return JSONResponse({"error": "Database not ready, try again shortly"}, status_code=503)
+    try:
+        row = asyncio.run(db.get_user_by_email(email))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"Login failed: {e}"}, status_code=500)
+    if not row or not row.get("password_hash") or not authmod.verify_password(
+        inp.password, row["password_hash"]
+    ):
+        return JSONResponse({"error": "Invalid email or password"}, status_code=401)
+    token = authmod.app_token(
+        str(row["id"]), row["email"], row.get("role", "public"), row.get("name") or ""
+    )
+    return {"token": token, "email": row["email"], "role": row.get("role", "public")}
+
+
 @app.post("/api/chat")
 def chat(inp: ChatIn, request: Request) -> JSONResponse:
     claims = authmod.require_user(request)

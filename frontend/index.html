@@ -39,6 +39,17 @@
 <div id="locked" style="display:none">
   <p>Chatting needs login.</p>
   <button onclick="location.href='/api/auth/google'">Sign in with Google</button>
+  <p style="margin:16px 0 8px">— or use email —</p>
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+    <input id="lname" placeholder="name (register)" autocomplete="name" style="background:#0f1420;color:#e8ecf4;border:1px solid #2a3550;border-radius:8px;padding:10px">
+    <input id="lemail" type="email" placeholder="email" autocomplete="email" style="background:#0f1420;color:#e8ecf4;border:1px solid #2a3550;border-radius:8px;padding:10px">
+    <input id="lpass" type="password" placeholder="password (8+ chars)" autocomplete="current-password" style="background:#0f1420;color:#e8ecf4;border:1px solid #2a3550;border-radius:8px;padding:10px">
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;justify-content:center">
+    <button onclick="doAuth('login')">Login</button>
+    <button class="ghost" onclick="doAuth('register')">Register</button>
+  </div>
+  <p id="autherr" style="color:#f0888f"></p>
 </div>
 <div id="bar" style="display:none">
   <input id="prompt" placeholder="হ্যালো লিখুন বা ask anything…" autocomplete="off">
@@ -121,6 +132,24 @@ async function send() {
 }
 sendBtn.onclick = send;
 promptEl.onkeydown = e => { if (e.key === 'Enter') send(); };
+async function doAuth(mode) {
+  const err = document.getElementById('autherr');
+  err.textContent = '';
+  const email = document.getElementById('lemail').value.trim();
+  const password = document.getElementById('lpass').value;
+  const name = document.getElementById('lname').value.trim();
+  try {
+    const r = await fetch('/api/' + mode, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password, name})
+    });
+    const j = await r.json();
+    if (!r.ok) { err.textContent = j.error || ('Failed: ' + r.status); return; }
+    localStorage.setItem('up_token', j.token);
+    me();
+  } catch (e) { err.textContent = 'Error: ' + e.message; }
+}
 </script>
 </body>
 </html>

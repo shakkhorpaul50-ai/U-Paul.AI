@@ -18,6 +18,7 @@ async def init_db(url: str) -> None:
             await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;")
             await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;")
             await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS picture TEXT;")
+            await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;")
         _db_ok = True
     except Exception as e:  # noqa: BLE001
         _db_error = str(e)[:200]
@@ -50,6 +51,43 @@ async def oauth_upsert(email: str, name: str, picture: str, google_sub: str, rol
             picture,
             google_sub,
         )
+    return dict(row)
+
+
+async def get_user_by_email(email: str) -> dict:
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT id, email, role, name, picture, password_hash FROM users WHERE email=$1",
+            email.strip().lower(),
+        )
+    return dict(row) if row else {}
+
+
+async def create_password_user(email: str, name: str, password_hash: str, role: str) -> dict:
+    """Insert new user, or claim a Google-only row (password_hash NULL). {} if taken."""
+    email = email.strip().lower()
+    async with _pool.acquire() as c:
+        row = await c.fetchrow("SELECT id, password_hash FROM users WHERE email=$1", email)
+        if row and row["password_hash"]:
+            return {}
+        if row:
+            row = await c.fetchrow(
+                "UPDATE users SET password_hash=$2, name=$3, role=$4 WHERE id=$1 "
+                "RETURNING id, email, role, name, picture",
+                row["id"],
+                password_hash,
+                name,
+                role,
+            )
+        else:
+            row = await c.fetchrow(
+                "INSERT INTO users(email, role, name, password_hash) VALUES($1, $2, $3, $4) "
+                "RETURNING id, email, role, name, picture",
+                email,
+                role,
+                name,
+                password_hash,
+            )
     return dict(row)
 
 

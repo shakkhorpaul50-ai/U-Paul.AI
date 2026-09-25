@@ -1,4 +1,6 @@
-"""Google OAuth (hand-rolled, stdlib HTTP) + app JWT (pyjwt). No native deps."""
+"""Google OAuth (hand-rolled, stdlib HTTP) + email/password (pbkdf2) + app JWT (pyjwt)."""
+import hashlib
+import hmac
 import json
 import secrets
 import time
@@ -72,6 +74,21 @@ def handle_callback(code: str, state: str, redirect_uri: str) -> dict:
     if not info.get("email"):
         raise HTTPException(400, "Google did not return an email")
     return info
+
+
+def hash_password(pw: str) -> str:
+    salt = secrets.token_bytes(16)
+    h = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, 200_000)
+    return f"pbkdf2_sha256$200000${salt.hex()}${h.hex()}"
+
+
+def verify_password(pw: str, stored: str) -> bool:
+    try:
+        _, it, salt, hh = stored.split("$")
+        h = hashlib.pbkdf2_hmac("sha256", pw.encode(), bytes.fromhex(salt), int(it))
+        return hmac.compare_digest(h.hex(), hh)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def app_token(user_id: str, email: str, role: str, name: str = "", picture: str = "") -> str:
