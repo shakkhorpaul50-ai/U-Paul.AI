@@ -2,19 +2,18 @@
 @{
     ViewData["Title"] = "Chat";
 }
-<div style="max-width:760px;margin:0 auto;font-family:system-ui,sans-serif;padding-bottom:90px">
-    <h2>U_Paul-AI chat</h2>
+<div class="chat-wrap">
+    <h2 class="chat-title">U_Paul-AI chat</h2>
     <div id="chat">
         @foreach (var m in Model)
         {
-            <div style="margin:10px 0;padding:10px 12px;border-radius:10px;background:@(m.Role == "user" ? "#1e2a45" : "#1a2236");color:#e8ecf4">@m.Content</div>
+            <div class="msg @(m.Role == "user" ? "user" : "bot")">@m.Content</div>
         }
     </div>
-    <div style="position:fixed;bottom:0;left:0;right:0;background:#161d2e;padding:10px">
-        <div style="max-width:760px;margin:0 auto;display:flex;gap:8px">
-            <input id="prompt" placeholder="হ্যালো লিখুন বা ask anything…" autocomplete="off"
-                   style="flex:1;background:#0f1420;color:#e8ecf4;border:1px solid #2a3550;border-radius:8px;padding:10px" />
-            <button id="send" style="background:#3b6fe0;color:#fff;border:0;border-radius:8px;padding:10px 16px">Send</button>
+    <div class="chat-bar">
+        <div style="max-width:780px;margin:0 auto;display:flex;gap:8px">
+            <input id="prompt" class="form-control" placeholder="হ্যালো লিখুন বা ask anything…" autocomplete="off" />
+            <button id="send" class="send">Send</button>
         </div>
     </div>
 </div>
@@ -24,12 +23,14 @@ const box = document.getElementById('chat');
 const input = document.getElementById('prompt');
 const btn = document.getElementById('send');
 const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
-function add(text, mine) {
+function add(text, mine, meta) {
   const d = document.createElement('div');
-  d.style.cssText = 'margin:10px 0;padding:10px 12px;border-radius:10px;color:#e8ecf4;white-space:pre-wrap;background:' + (mine ? '#1e2a45' : '#1a2236');
+  d.className = 'msg ' + (mine ? 'user' : 'bot');
   d.textContent = text;
+  if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; d.appendChild(m); }
   box.appendChild(d);
   window.scrollTo(0, document.body.scrollHeight);
+  return d;
 }
 async function send() {
   const prompt = input.value.trim();
@@ -37,14 +38,21 @@ async function send() {
   input.value = '';
   btn.disabled = true;
   add(prompt, true);
+  const thinking = add('thinking…', false);
+  thinking.classList.add('typing');
   const body = new URLSearchParams({ prompt, __RequestVerificationToken: token });
+  const t0 = Date.now();
   try {
     const r = await fetch('/Chat/Send', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body });
     const j = await r.json();
-    add(j.reply || j.error || ('Error ' + r.status), false);
-  } catch (e) { add('Error: ' + e.message, false); }
+    thinking.remove();
+    if (j.reply) add(j.reply, false, (j.skill || '') + ' · ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
+    else add(j.error || ('Error ' + r.status), false);
+  } catch (e) { thinking.remove(); add('Error: ' + e.message, false); }
   btn.disabled = false;
+  input.focus();
 }
 btn.onclick = send;
 input.onkeydown = e => { if (e.key === 'Enter') send(); };
+input.focus();
 </script>

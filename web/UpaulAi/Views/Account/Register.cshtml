@@ -2,14 +2,14 @@
 @{
     ViewData["Title"] = "Register";
 }
-<div style="max-width:420px;margin:40px auto;font-family:system-ui,sans-serif">
+<div class="auth-card">
     <h2>Register for U_Paul-AI</h2>
     <form asp-action="Register" method="post">
-        <div asp-validation-summary="All" style="color:#b3261e"></div>
-        <p><label>Email<br /><input asp-for="Email" type="email" style="width:100%;padding:8px" /></label></p>
-        <p><label>Name (optional)<br /><input asp-for="DisplayName" style="width:100%;padding:8px" /></label></p>
-        <p><label>Password (8+ chars)<br /><input asp-for="Password" type="password" style="width:100%;padding:8px" /></label></p>
-        <p><button type="submit" style="padding:10px 20px">Register</button>
+        <div asp-validation-summary="All"></div>
+        <p><label>Email<br /><input asp-for="Email" type="email" class="form-control" /></label></p>
+        <p><label>Name (optional)<br /><input asp-for="DisplayName" class="form-control" /></label></p>
+        <p><label>Password (8+ chars)<br /><input asp-for="Password" type="password" class="form-control" /></label></p>
+        <p><button type="submit" class="btn btn-primary">Register</button>
         <a asp-action="Login">Have an account? Login</a></p>
     </form>
 </div>

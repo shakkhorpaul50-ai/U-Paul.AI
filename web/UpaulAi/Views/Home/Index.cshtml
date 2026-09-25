@@ -1,15 +1,15 @@
 ﻿@{
     ViewData["Title"] = "U_Paul-AI";
 }
-<div style="max-width:720px;margin:40px auto;text-align:center;font-family:system-ui,sans-serif">
+<div class="hero">
     <h1>U_Paul-AI</h1>
     <p>260M Bangla + English chat — stories, poems, songs, coding help and friendly company. Built from scratch by <b>Shakkhor Paul</b>.</p>
     @if (User.Identity?.IsAuthenticated == true)
     {
-        <p><a href="/Chat">Open chat →</a></p>
+        <p><a class="cta" href="/Chat">Open chat →</a></p>
     }
     else
     {
-        <p><a href="/Account/Register">Register</a> or <a href="/Account/Login">Login</a> to start chatting.</p>
+        <p><a class="cta" href="/Account/Register">Register</a><a class="cta ghost" href="/Account/Login">Login</a></p>
     }
 </div>
