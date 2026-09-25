@@ -11,7 +11,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: RELEASE_URL
-        value: SET_TO_GGUF_RELEASE_URL
+        sync: false
       - key: MODEL_PATH
         value: models/gguf/smol260M-Q3_K_M.gguf
       - key: N_CTX
