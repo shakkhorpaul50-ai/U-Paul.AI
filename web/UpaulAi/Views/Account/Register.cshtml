@@ -1,15 +1,40 @@
 @model UPaulAi.Models.RegisterViewModel
 @{
-    ViewData["Title"] = "Register";
+    ViewData["Title"] = "Create account";
 }
 <div class="auth-card">
-    <h2>Register for U_Paul-AI</h2>
-    <form asp-action="Register" method="post">
+    <h2>Create your account</h2>
+    <p class="sub">One account for Bangla + English chat, stories, poems and code help.</p>
+    <form asp-action="Register" method="post" id="regform">
         <div asp-validation-summary="All"></div>
-        <p><label>Email<br /><input asp-for="Email" type="email" class="form-control" /></label></p>
-        <p><label>Name (optional)<br /><input asp-for="DisplayName" class="form-control" /></label></p>
-        <p><label>Password (8+ chars)<br /><input asp-for="Password" type="password" class="form-control" /></label></p>
-        <p><button type="submit" class="btn btn-primary">Register</button>
-        <a asp-action="Login">Have an account? Login</a></p>
+        <p><label>Email<br /><input asp-for="Email" type="email" class="form-control" autocomplete="email" /></label></p>
+        <p><label>Display name (optional)<br /><input asp-for="DisplayName" class="form-control" autocomplete="nickname" /></label></p>
+        <p><label>Password (8+ characters)<br />
+            <span class="pw-wrap"><input asp-for="Password" type="password" class="form-control" id="regpass" autocomplete="new-password" />
+            <button type="button" class="ghost sm" data-toggle="regpass">Show</button></span></label>
+            <span class="meter"><span id="meterfill"></span></span>
+            <small id="metertext" class="muted"></small></p>
+        <p><button type="submit" class="btn btn-primary block">Create account</button></p>
+        <p class="switch">Have an account? <a asp-action="Login">Login</a></p>
     </form>
 </div>
+<script>
+(function () {
+  var p = document.getElementById('regpass'), f = document.getElementById('meterfill'), t = document.getElementById('metertext');
+  document.querySelector('[data-toggle="regpass"]').onclick = function () {
+    var show = p.type === 'password'; p.type = show ? 'text' : 'password'; this.textContent = show ? 'Hide' : 'Show';
+  };
+  p.oninput = function () {
+    var v = p.value, s = 0;
+    if (v.length >= 8) s++;
+    if (v.length >= 12) s++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+    if (/\d/.test(v)) s++;
+    if (/[^A-Za-z0-9]/.test(v)) s++;
+    var pct = Math.min(100, s * 20), label = ['Too short', 'Weak', 'Okay', 'Good', 'Strong', 'Excellent'][Math.min(s, 5)];
+    f.style.width = pct + '%';
+    f.style.background = s < 2 ? '#f0888f' : s < 4 ? '#eab308' : '#34d399';
+    t.textContent = v ? label : '';
+  };
+})();
+</script>

@@ -27,6 +27,7 @@ builder.Services.AddHttpClient<LlamaClient>(c =>
     c.BaseAddress = new Uri(builder.Configuration["Llama:Endpoint"] ?? "http://127.0.0.1:8080"));
 builder.Services.AddScoped<RoleSeeder>();
 builder.Services.AddSingleton<SkillRouter>();
+builder.Services.AddSingleton<EmailSender>();
 
 var app = builder.Build();
 

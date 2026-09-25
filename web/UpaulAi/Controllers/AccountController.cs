@@ -9,7 +9,8 @@ namespace UPaulAi.Controllers;
 public sealed class AccountController(
     UserManager<AppUser> users,
     SignInManager<AppUser> signIn,
-    RoleSeeder seeder) : Controller
+    RoleSeeder seeder,
+    EmailSender mail) : Controller
 {
     [AllowAnonymous, HttpGet]
     public IActionResult Register() => View(new RegisterViewModel());
@@ -75,5 +76,74 @@ public sealed class AccountController(
     {
         await signIn.SignOutAsync();
         return RedirectToAction("Index", "Home");
+    }
+
+    [AllowAnonymous, HttpGet]
+    public IActionResult ForgotPassword() => View(new ForgotPasswordViewModel());
+
+    [AllowAnonymous, HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel m)
+    {
+        if (!ModelState.IsValid) return View(m);
+        var u = await users.FindByEmailAsync(m.Email);
+        // Always show confirmation: never reveal whether the email exists.
+        if (u is not null && mail.Configured)
+        {
+            var code = await users.GeneratePasswordResetTokenAsync(u);
+            var link = Url.Action("ResetPassword", "Account",
+                new { email = u.Email, code }, Request.Scheme);
+            await mail.SendAsync(u.Email!,
+                "U_Paul-AI password reset",
+                $"Click <a href=\"{link}\">here</a> to reset your U_Paul-AI password. The link expires in one day.");
+        }
+        else if (u is not null)
+        {
+            ModelState.AddModelError("", "Password reset email is not configured yet. Contact support.");
+            return View(m);
+        }
+        return View("ForgotPasswordConfirmation");
+    }
+
+    [AllowAnonymous, HttpGet]
+    public IActionResult ResetPassword(string email, string code)
+    {
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(code))
+            return RedirectToAction("ForgotPassword");
+        return View(new ResetPasswordViewModel { Email = email, Code = code });
+    }
+
+    [AllowAnonymous, HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(ResetPasswordViewModel m)
+    {
+        if (!ModelState.IsValid) return View(m);
+        var u = await users.FindByEmailAsync(m.Email);
+        if (u is null) return View("ResetPasswordConfirmation");
+        var r = await users.ResetPasswordAsync(u, m.Code, m.Password);
+        if (!r.Succeeded)
+        {
+            foreach (var e in r.Errors) ModelState.AddModelError("", e.Description);
+            return View(m);
+        }
+        return View("ResetPasswordConfirmation");
+    }
+
+    [HttpGet]
+    public IActionResult ChangePassword() => View(new ChangePasswordViewModel());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangePassword(ChangePasswordViewModel m)
+    {
+        if (!ModelState.IsValid) return View(m);
+        var u = await users.GetUserAsync(User);
+        if (u is null) return Challenge();
+        var r = await users.ChangePasswordAsync(u, m.OldPassword, m.NewPassword);
+        if (!r.Succeeded)
+        {
+            foreach (var e in r.Errors) ModelState.AddModelError("", e.Description);
+            return View(m);
+        }
+        await signIn.RefreshSignInAsync(u);
+        ViewBag.Done = true;
+        return View(m);
     }
 }

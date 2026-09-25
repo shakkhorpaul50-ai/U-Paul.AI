@@ -3,14 +3,24 @@
     ViewData["Title"] = "Login";
 }
 <div class="auth-card">
-    <h2>Login to U_Paul-AI</h2>
+    <h2>Welcome back</h2>
+    <p class="sub">Login to continue chatting with U_Paul-AI.</p>
     <form asp-action="Login" method="post">
         <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
         <div asp-validation-summary="All"></div>
-        <p><label>Email<br /><input asp-for="Email" type="email" class="form-control" /></label></p>
-        <p><label>Password<br /><input asp-for="Password" type="password" class="form-control" /></label></p>
-        <p><label><input asp-for="RememberMe" /> Remember me</label></p>
-        <p><button type="submit" class="btn btn-primary">Login</button>
-        <a asp-action="Register">Need an account? Register</a></p>
+        <p><label>Email<br /><input asp-for="Email" type="email" class="form-control" autocomplete="email" /></label></p>
+        <p><label>Password<br />
+            <span class="pw-wrap"><input asp-for="Password" type="password" class="form-control" id="loginpass" autocomplete="current-password" />
+            <button type="button" class="ghost sm" data-toggle="loginpass">Show</button></span></label></p>
+        <p class="row-between"><label><input asp-for="RememberMe" /> Remember me</label>
+        <a asp-action="ForgotPassword">Forgot password?</a></p>
+        <p><button type="submit" class="btn btn-primary block">Login</button></p>
+        <p class="switch">Need an account? <a asp-action="Register">Register</a></p>
     </form>
 </div>
+<script>
+document.querySelector('[data-toggle="loginpass"]').onclick = function () {
+  var p = document.getElementById('loginpass'), show = p.type === 'password';
+  p.type = show ? 'text' : 'password'; this.textContent = show ? 'Hide' : 'Show';
+};
+</script>
