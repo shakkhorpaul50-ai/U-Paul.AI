@@ -1,10 +1,10 @@
 *.gguf
 *.zip
-data/
-__pycache__/
+/data/
+/__pycache__/
 .venv/
 .env
-models/base-260M/
+/models/base-260M/
 [Bb]in/
 [Oo]bj/
 *.user
