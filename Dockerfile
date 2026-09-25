@@ -16,7 +16,9 @@ RUN apt-get update \
 ADD https://github.com/ggml-org/llama.cpp/releases/download/b11146/llama-b11146-bin-ubuntu-x64.tar.gz /tmp/llama.tgz
 RUN mkdir -p /opt/llama \
     && tar -xzf /tmp/llama.tgz -C /opt/llama \
-    && cp "$(find /opt/llama -name llama-server -type f | head -1)" /usr/local/bin/llama-server \
+    && SRVDIR="$(dirname "$(find /opt/llama -name llama-server -type f | head -1)")" \
+    && cp "$SRVDIR"/llama-server /usr/local/bin/ \
+    && (cp "$SRVDIR"/*.so* /usr/local/bin/ 2>/dev/null || true) \
     && rm /tmp/llama.tgz \
     && llama-server --version
 WORKDIR /app
